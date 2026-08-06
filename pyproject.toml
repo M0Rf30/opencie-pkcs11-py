@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencie-pkcs11"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python ctypes bindings for libopencie-pkcs11 — PKCS#11 interface for the Italian CIE smart card"
 license = "MPL-2.0"
 requires-python = ">=3.10"
