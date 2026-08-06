@@ -17,6 +17,7 @@ from ctypes import (
     c_int,
     c_size_t,
     c_ubyte,
+    c_uint16,
     c_ulong,
 )
 
@@ -183,6 +184,18 @@ class CK_C_INITIALIZE_ARGS(Structure):
 # ---------------------------------------------------------------------------
 # CIE structures
 # ---------------------------------------------------------------------------
+
+# CIE error kinds
+CIE_ERR_NONE = 0
+CIE_ERR_WRONG_PIN = 1
+CIE_ERR_PIN_BLOCKED = 2
+CIE_ERR_PIN_NOT_SET = 3
+CIE_ERR_SECURITY_NOT_SATISFIED = 4
+CIE_ERR_FILE_NOT_FOUND = 5
+CIE_ERR_WRONG_PARAMS = 6
+CIE_ERR_INS_NOT_SUPPORTED = 7
+CIE_ERR_CARD_COMMUNICATION = 8
+CIE_ERR_UNKNOWN = 9
 
 OPENCIE_MAX_LEN = 512
 
@@ -647,5 +660,20 @@ try:
         POINTER(c_size_t),
     ]
     lib.make_digest_info.restype = c_int
+except AttributeError:
+    pass
+
+try:
+    lib.cie_classify_sw.argtypes = [c_uint16]
+    lib.cie_classify_sw.restype = c_int
+except AttributeError:
+    pass
+
+try:
+    lib.cie_last_error.argtypes = [
+        POINTER(c_int),  # outKind
+        POINTER(c_uint16),  # outSw
+    ]
+    lib.cie_last_error.restype = CK_RV
 except AttributeError:
     pass

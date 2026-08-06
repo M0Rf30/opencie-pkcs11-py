@@ -12,11 +12,25 @@ from ctypes import (
     c_int,
     c_size_t,
     c_ubyte,
+    c_uint16,
     c_ulong,
 )
 from dataclasses import dataclass
 
-from opencie_pkcs11._ffi import VerifyInfoC, lib
+from opencie_pkcs11._ffi import (
+    CIE_ERR_CARD_COMMUNICATION,
+    CIE_ERR_FILE_NOT_FOUND,
+    CIE_ERR_INS_NOT_SUPPORTED,
+    CIE_ERR_NONE,
+    CIE_ERR_PIN_BLOCKED,
+    CIE_ERR_PIN_NOT_SET,
+    CIE_ERR_SECURITY_NOT_SATISFIED,
+    CIE_ERR_UNKNOWN,
+    CIE_ERR_WRONG_PARAMS,
+    CIE_ERR_WRONG_PIN,
+    VerifyInfoC,
+    lib,
+)
 from opencie_pkcs11.pkcs11 import PKCS11Error
 
 # Threshold separating "small positive count" from "PKCS#11 error code" in
@@ -284,3 +298,67 @@ def make_digest_info(algid: int, digest: bytes) -> bytes:
         )
 
     raise PKCS11Error(0x150)  # CKR_BUFFER_TOO_SMALL
+
+
+def classify_sw(sw: int) -> int:
+    """Classify an ISO 7816 status word to an error kind.
+
+    Args:
+        sw: ISO 7816 status word (16-bit value).
+
+    Returns:
+        A CIE_ERR_* constant indicating the error classification.
+        Unknown status words map to CIE_ERR_UNKNOWN.
+
+    Raises:
+        AttributeError: If cie_classify_sw is not available in
+            libopencie-pkcs11 (requires a version with error classification
+            support).
+    """
+    try:
+        result = lib.cie_classify_sw(sw)
+    except AttributeError:
+        raise AttributeError(
+            "cie_classify_sw not available - requires libopencie-pkcs11 "
+            "with error classification support"
+        ) from None
+    # Map unexpected out-of-range returns to UNKNOWN
+    error_kinds = {
+        CIE_ERR_NONE,
+        CIE_ERR_WRONG_PIN,
+        CIE_ERR_PIN_BLOCKED,
+        CIE_ERR_PIN_NOT_SET,
+        CIE_ERR_SECURITY_NOT_SATISFIED,
+        CIE_ERR_FILE_NOT_FOUND,
+        CIE_ERR_WRONG_PARAMS,
+        CIE_ERR_INS_NOT_SUPPORTED,
+        CIE_ERR_CARD_COMMUNICATION,
+        CIE_ERR_UNKNOWN,
+    }
+    return result if result in error_kinds else CIE_ERR_UNKNOWN
+
+
+def last_error() -> tuple[int, int]:
+    """Retrieve the most recent error information on the current thread.
+
+    Returns:
+        A tuple of (error_kind, status_word) where:
+        - error_kind is a CIE_ERR_* constant, or CIE_ERR_NONE if no error
+        - status_word is the raw ISO 7816 status word (0 if not applicable)
+
+    Raises:
+        AttributeError: If cie_last_error is not available in
+            libopencie-pkcs11 (requires a version with error classification
+            support).
+    """
+    try:
+        error_kind = c_int()
+        status_word = c_uint16()
+        rv = lib.cie_last_error(byref(error_kind), byref(status_word))
+        _check_rv(rv)
+        return (error_kind.value, status_word.value)
+    except AttributeError:
+        raise AttributeError(
+            "cie_last_error not available - requires libopencie-pkcs11 "
+            "with error classification support"
+        ) from None
