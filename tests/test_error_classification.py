@@ -36,7 +36,7 @@ def test_error_kind_constants():
 
 @pytest.mark.skipif(
     not hasattr(lib, "cie_classify_sw"),
-    reason="libopencie-pkcs11 lacks cie_classify_sw (requires error classification support)",
+    reason="libopencie-pkcs11 lacks cie_classify_sw",
 )
 def test_classify_sw_valid():
     """Test classify_sw with valid status words."""
@@ -46,7 +46,7 @@ def test_classify_sw_valid():
 
 @pytest.mark.skipif(
     not hasattr(lib, "cie_classify_sw"),
-    reason="libopencie-pkcs11 lacks cie_classify_sw (requires error classification support)",
+    reason="libopencie-pkcs11 lacks cie_classify_sw",
 )
 def test_classify_sw_out_of_range():
     """Test classify_sw maps unknown returns to CIE_ERR_UNKNOWN."""
@@ -68,7 +68,7 @@ def test_classify_sw_missing_symbol():
 
 @pytest.mark.skipif(
     not hasattr(lib, "cie_last_error"),
-    reason="libopencie-pkcs11 lacks cie_last_error (requires error classification support)",
+    reason="libopencie-pkcs11 lacks cie_last_error",
 )
 def test_last_error_return_type():
     """Test last_error returns a tuple of two integers."""
