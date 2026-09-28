@@ -11,6 +11,9 @@ pip install opencie-pkcs11
 ### Build Requirements
 
 - **libopencie-pkcs11** must be installed on your system
+  - **libopencie-pkcs11 >= 1.0.15** is required for `cie.is_enabled()` and
+    `cie.get_certificate()` to recognize cards paired only through the
+    official IPZS CIE ID app (present but not cached locally).
   - See [opencie-pkcs11 releases](https://github.com/M0Rf30/opencie-pkcs11/releases) for pre-built binaries
   - Or build from [source](https://github.com/M0Rf30/opencie-pkcs11)
 - Python **>=3.10**

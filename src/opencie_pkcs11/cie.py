@@ -84,7 +84,14 @@ def enable(pan: str, pin: str) -> int:
 
 
 def is_enabled(pan: str) -> bool:
-    """Return True if the card identified by PAN is currently enrolled."""
+    """Return True if the card identified by PAN is currently enrolled.
+
+    Since libopencie-pkcs11 1.0.15, this also returns True if a card with
+    that PAN is currently inserted (checked directly on the card, no PIN
+    required), even if it was never enrolled into the local cache
+    (~/.CIEPKI). This covers cards paired only through the official IPZS
+    CIE ID app.
+    """
     return lib.cie_is_enabled(pan.encode()) == 1
 
 
@@ -221,7 +228,13 @@ def reader_name() -> str | None:
 
 
 def get_certificate(pan: str) -> bytes:
-    """Fetch the DER-encoded auth certificate for the card identified by pan."""
+    """Fetch the DER-encoded auth certificate for the card identified by pan.
+
+    Since libopencie-pkcs11 1.0.15, if the local cache (~/.CIEPKI) has no
+    certificate for this PAN, it falls back to reading the certificate
+    directly from an inserted card (no PIN required) instead of raising
+    CKR_DEVICE_ERROR.
+    """
     out_ptr = POINTER(c_ubyte)()
     out_len = c_ulong(0)
     rv = lib.cie_get_certificate(pan.encode(), byref(out_ptr), byref(out_len))
