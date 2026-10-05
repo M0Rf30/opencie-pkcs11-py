@@ -52,7 +52,13 @@ CKR_ATTRIBUTE_TYPE_INVALID = 0x00000012
 
 
 class PKCS11Error(Exception):
-    """Raised when a C_* call returns a CK_RV other than CKR_OK."""
+    """Raised when a C_* call returns a CK_RV other than CKR_OK.
+
+    ``attempts`` is set (to the remaining PIN/PUK attempts reported by the
+    library) by the PIN-related CIE calls; it is None otherwise.
+    """
+
+    attempts: int | None = None
 
     def __init__(self, rv: int) -> None:
         self.rv = rv
