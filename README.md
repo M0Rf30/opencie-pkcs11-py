@@ -11,9 +11,10 @@ pip install opencie-pkcs11
 ### Build Requirements
 
 - **libopencie-pkcs11** must be installed on your system
-  - **libopencie-pkcs11 >= 1.0.15** is required for `cie.is_enabled()` and
-    `cie.get_certificate()` to recognize cards paired only through the
-    official IPZS CIE ID app (present but not cached locally).
+  - **libopencie-pkcs11 >= 1.3.0** is required (`cie.read_dgs_can()`,
+    `cie_free`-based certificate release, CAN error kind, and the
+    `cie.verify()` return-code contract). Older builds still import, but
+    the new calls raise `AttributeError`.
   - See [opencie-pkcs11 releases](https://github.com/M0Rf30/opencie-pkcs11/releases) for pre-built binaries
   - Or build from [source](https://github.com/M0Rf30/opencie-pkcs11)
 - Python **>=3.10**
@@ -104,11 +105,12 @@ out_file = "document_signed.pdf"
 
 image_data = Path("signature.png").read_bytes()
 
-cie.sign(in_file, "PDF", pin, pan, 0, 100, 100, 200, 50, image_data, out_file)
+cie.sign(in_file, "PDF", pin, pan, 0, 0.1, 0.1, 0.4, 0.1, image_data, out_file)
 print(f"Document signed: {out_file}")
 
+# Number of signatures found (0 if none). Raises PKCS11Error on failure.
 sig_count = cie.verify(out_file)
-print(f"Found {sig_count} valid signature(s)")
+print(f"Found {sig_count} signature(s)")
 
 for i in range(sig_count):
     info = cie.get_verify_info(i)
@@ -135,11 +137,50 @@ n = cie.reader_watch(n)
 print(f"Reader count is now: {n}")
 ```
 
-## Limitations
+### CIE: Reading the MRZ and Photo (ICAO 9303)
 
-- **Callbacks**: Progress and completion callbacks are not exposed. `NULL` is always passed to the underlying `PROGRESS_CALLBACK`/`COMPLETED_CALLBACK`/`SIGN_COMPLETED_CALLBACK` parameters; long-running calls (enrolment, signing, PIN operations) block until completion with no progress reporting.
+```python
+from opencie_pkcs11 import cie
+from opencie_pkcs11.cie import WrongCanError
+from opencie_pkcs11.pkcs11 import PKCS11Error
+
+try:
+    mrz, photo_png = cie.read_dgs_can("123456")  # 6-digit CAN printed on the card
+except WrongCanError:
+    raise SystemExit("Wrong CAN - do not retry with the same value")
+except PKCS11Error as exc:
+    # Readers without extended-length APDUs (e.g. ACS ACR122U) cannot run PACE:
+    # CKR_DEVICE_ERROR + CIE_ERR_INS_NOT_SUPPORTED. Fall back to the PIN.
+    if getattr(exc, "kind", None) == cie.CIE_ERR_INS_NOT_SUPPORTED:
+        mrz, photo_png = cie.read_dgs("12345678")
+    else:
+        raise
+```
+
+`read_dgs_can` returns `CKR_PIN_INCORRECT` + `CIE_ERR_WRONG_CAN` (raised as
+`WrongCanError`) for a wrong CAN, `CKR_FUNCTION_NOT_SUPPORTED` +
+`CIE_ERR_UNSUPPORTED_CARD` when the chip has no supported PACE, and
+`CKR_ARGUMENTS_BAD` for a CAN that is not exactly 6 digits. Failures that the
+library classifies are raised as `CieError` (a `PKCS11Error` carrying `kind`
+and `sw`).
+
+## Notes
+
+- **Callbacks**: libopencie-pkcs11 calls its progress/completion callbacks
+  unconditionally and they must never be `NULL`; the bindings always pass
+  native stubs. Pass `progress=callable(percentage, message)` (and
+  `completed=` for `enable`/`sign`) to receive notifications. Exceptions raised
+  by your callbacks are re-raised once the native call returns.
+- **Verification**: `cie.verify()` returns the number of signatures found. A
+  result different from `cie.get_sign_count()` is an error and raises
+  `PKCS11Error` (`CIE_SIGN_ERROR_*`, 0x84000000 and up).
+- **PIN attempts**: PIN-related failures expose the remaining attempts as
+  `PKCS11Error.attempts`.
+- **Library selection**: set `OPENCIE_PKCS11_LIB` to the absolute path of a
+  specific `libopencie-pkcs11` build to bypass the dynamic linker search.
 - **Thread Safety**: The underlying C library uses locking internally, but callers should still avoid concurrent calls against the same session or card from multiple threads without external synchronization.
-- **Memory Management**: The bindings own all C memory allocated on your behalf (e.g. `cie_get_certificate`'s output buffer) and free it before returning. Do not hold onto raw `ctypes` pointers from these calls.
+- **Memory Management**: The bindings own all C memory allocated on your behalf (e.g. `cie_get_certificate`'s output buffer, released with `cie_free`) and free it before returning. Do not hold onto raw `ctypes` pointers from these calls.
+- **Windows structs**: PKCS#11 structures are declared with 1-byte packing on Windows, matching `cryptoki.h`.
 
 ## Platform Support
 
