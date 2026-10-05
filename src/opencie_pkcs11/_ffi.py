@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import os
 import sys
 from ctypes import (
     CFUNCTYPE,
@@ -45,8 +46,17 @@ CK_FALSE: int = 0
 
 # Common return codes
 CKR_OK = 0x00000000
+CKR_HOST_MEMORY = 0x00000002
+CKR_GENERAL_ERROR = 0x00000005
+CKR_FUNCTION_FAILED = 0x00000006
 CKR_ARGUMENTS_BAD = 0x00000007
+CKR_DEVICE_ERROR = 0x00000030
+CKR_FUNCTION_NOT_SUPPORTED = 0x00000054
+CKR_PIN_INCORRECT = 0x000000A0
+CKR_PIN_LOCKED = 0x000000A4
 CKR_BUFFER_TOO_SMALL = 0x00000150
+CKR_TOKEN_NOT_PRESENT = 0x000000E0
+CKR_TOKEN_NOT_RECOGNIZED = 0x000000E1
 
 # Session flags
 CKF_SERIAL_SESSION = 0x00000004
@@ -97,12 +107,22 @@ CK_UNAVAILABLE_INFORMATION = c_ulong(-1).value
 # PKCS#11 structures
 # ---------------------------------------------------------------------------
 
+# cryptoki.h wraps every PKCS#11 struct in `#pragma pack(push, cryptoki, 1)`
+# on Windows only; elsewhere the natural alignment applies.
 
-class CK_VERSION(Structure):
+
+class _CkStruct(Structure):
+    """Base of every PKCS#11 struct (packed on Windows, native layout elsewhere)."""
+
+    if sys.platform == "win32":
+        _pack_ = 1
+
+
+class CK_VERSION(_CkStruct):
     _fields_ = [("major", CK_BYTE), ("minor", CK_BYTE)]
 
 
-class CK_INFO(Structure):
+class CK_INFO(_CkStruct):
     _fields_ = [
         ("cryptokiVersion", CK_VERSION),
         ("manufacturerID", CK_UTF8CHAR * 32),
@@ -112,7 +132,7 @@ class CK_INFO(Structure):
     ]
 
 
-class CK_SLOT_INFO(Structure):
+class CK_SLOT_INFO(_CkStruct):
     _fields_ = [
         ("slotDescription", CK_UTF8CHAR * 64),
         ("manufacturerID", CK_UTF8CHAR * 32),
@@ -122,7 +142,7 @@ class CK_SLOT_INFO(Structure):
     ]
 
 
-class CK_TOKEN_INFO(Structure):
+class CK_TOKEN_INFO(_CkStruct):
     _fields_ = [
         ("label", CK_UTF8CHAR * 32),
         ("manufacturerID", CK_UTF8CHAR * 32),
@@ -145,7 +165,7 @@ class CK_TOKEN_INFO(Structure):
     ]
 
 
-class CK_SESSION_INFO(Structure):
+class CK_SESSION_INFO(_CkStruct):
     _fields_ = [
         ("slotID", CK_SLOT_ID),
         ("state", CK_STATE),
@@ -154,7 +174,7 @@ class CK_SESSION_INFO(Structure):
     ]
 
 
-class CK_MECHANISM(Structure):
+class CK_MECHANISM(_CkStruct):
     _fields_ = [
         ("mechanism", CK_MECHANISM_TYPE),
         ("pParameter", CK_VOID_PTR),
@@ -162,7 +182,7 @@ class CK_MECHANISM(Structure):
     ]
 
 
-class CK_ATTRIBUTE(Structure):
+class CK_ATTRIBUTE(_CkStruct):
     _fields_ = [
         ("type", CK_ATTRIBUTE_TYPE),
         ("pValue", CK_VOID_PTR),
@@ -170,7 +190,7 @@ class CK_ATTRIBUTE(Structure):
     ]
 
 
-class CK_C_INITIALIZE_ARGS(Structure):
+class CK_C_INITIALIZE_ARGS(_CkStruct):
     _fields_ = [
         ("CreateMutex", CK_VOID_PTR),
         ("DestroyMutex", CK_VOID_PTR),
@@ -196,6 +216,11 @@ CIE_ERR_WRONG_PARAMS = 6
 CIE_ERR_INS_NOT_SUPPORTED = 7
 CIE_ERR_CARD_COMMUNICATION = 8
 CIE_ERR_UNKNOWN = 9
+CIE_ERR_UNSUPPORTED_CARD = 10
+CIE_ERR_WRONG_CAN = 11
+
+# Base of the CIE_SIGN_ERROR_* codes that cie_verify() may return as CK_RV.
+CIE_SIGN_ERROR_BASE = 0x84000000
 
 OPENCIE_MAX_LEN = 512
 
@@ -235,6 +260,12 @@ _LIB_NAMES = {
 
 
 def _load_library() -> ctypes.CDLL:
+    # Explicit override (absolute path to the shared library), e.g. to pick a
+    # specific release when several are installed.
+    override = os.environ.get("OPENCIE_PKCS11_LIB")
+    if override:
+        return ctypes.CDLL(override)
+
     name = _LIB_NAMES.get(sys.platform)
     if name is None:
         name = "libopencie-pkcs11.so"
@@ -581,11 +612,12 @@ lib.cie_sign.argtypes = [
 ]
 lib.cie_sign.restype = CK_RV
 
-# cie_verify
+# cie_verify (returns CK_RV: signature count, 0 if none, or an error code;
+# a value different from cie_get_sign_count() is an error)
 lib.cie_verify.argtypes = [c_char_p, c_char_p, c_int, c_char_p]
 lib.cie_verify.restype = CK_RV
 
-# cie_get_sign_count
+# cie_get_sign_count (returns CK_RV: signature count or an error code)
 lib.cie_get_sign_count.argtypes = []
 lib.cie_get_sign_count.restype = CK_RV
 
@@ -610,7 +642,9 @@ lib.cie_reader_name.argtypes = [c_char_p, c_int]
 lib.cie_reader_name.restype = c_int
 
 # ---------------------------------------------------------------------------
-# Optional symbols — available in libopencie-pkcs11 >= 1.0.6. Wrapped in
+# Optional symbols. cie_get_certificate/cie_timestamp/cie_read_dgs appeared in
+# libopencie-pkcs11 >= 1.0.6, cie_classify_sw/cie_last_error in >= 1.0.12 and
+# cie_read_dgs_can/cie_free are part of the 1.3.0 public API. Wrapped in
 # try/except so the bindings remain importable against older library builds
 # that lack these exports; the corresponding Python wrappers raise
 # AttributeError at call time.
@@ -660,6 +694,24 @@ try:
         POINTER(c_size_t),
     ]
     lib.make_digest_info.restype = c_int
+except AttributeError:
+    pass
+
+try:
+    lib.cie_read_dgs_can.argtypes = [
+        c_char_p,  # can (exactly 6 ASCII digits)
+        c_char_p,  # mrzOut
+        POINTER(c_size_t),  # mrzLen
+        POINTER(c_ubyte),  # photoOut
+        POINTER(c_size_t),  # photoLen
+    ]
+    lib.cie_read_dgs_can.restype = CK_RV
+except AttributeError:
+    pass
+
+try:
+    lib.cie_free.argtypes = [ctypes.c_void_p]
+    lib.cie_free.restype = None
 except AttributeError:
     pass
 
