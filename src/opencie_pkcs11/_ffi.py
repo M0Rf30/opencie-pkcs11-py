@@ -259,20 +259,61 @@ _LIB_NAMES = {
 }
 
 
+_RELEASES_URL = "https://github.com/M0Rf30/opencie-pkcs11/releases"
+_MIN_LIB_VERSION = "1.3.0"
+
+# Symbols that first appeared in libopencie-pkcs11 1.3.0. The C library
+# exports no version symbol (C_GetInfo cannot be used at import time: it fails
+# with CKR_CRYPTOKI_NOT_INITIALIZED before C_Initialize), so the presence of
+# these symbols is the version probe.
+_SYMBOLS_SINCE_1_3_0 = ("cie_read_dgs_can", "cie_last_error")
+
+
+class LibraryLoadError(ImportError):
+    """libopencie-pkcs11 is missing, unloadable, or older than required."""
+
+
+def _install_hint() -> str:
+    return (
+        f"Install libopencie-pkcs11 >= {_MIN_LIB_VERSION} (pre-built binaries: "
+        f"{_RELEASES_URL}) or set OPENCIE_PKCS11_LIB to the absolute path of "
+        "the shared library."
+    )
+
+
+def _check_version(handle: ctypes.CDLL, path: str) -> None:
+    missing = [sym for sym in _SYMBOLS_SINCE_1_3_0 if not hasattr(handle, sym)]
+    if missing:
+        raise LibraryLoadError(
+            f"{path} is older than the required libopencie-pkcs11 "
+            f">= {_MIN_LIB_VERSION}: found a build lacking {', '.join(missing)} "
+            f"(introduced in {_MIN_LIB_VERSION}). {_install_hint()}"
+        )
+
+
 def _load_library() -> ctypes.CDLL:
     # Explicit override (absolute path to the shared library), e.g. to pick a
     # specific release when several are installed.
     override = os.environ.get("OPENCIE_PKCS11_LIB")
     if override:
-        return ctypes.CDLL(override)
+        path = override
+        source = "OPENCIE_PKCS11_LIB"
+    else:
+        # Try platform search first, then fall-back to the bare name.
+        path = ctypes.util.find_library("opencie-pkcs11") or _LIB_NAMES.get(
+            sys.platform, "libopencie-pkcs11.so"
+        )
+        source = "the system library search path"
 
-    name = _LIB_NAMES.get(sys.platform)
-    if name is None:
-        name = "libopencie-pkcs11.so"
-
-    # Try platform search first, then fall-back to the bare name.
-    path = ctypes.util.find_library("opencie-pkcs11") or name
-    return ctypes.CDLL(path)
+    try:
+        handle = ctypes.CDLL(path)
+    except OSError as exc:
+        raise LibraryLoadError(
+            f"Cannot load libopencie-pkcs11 ({path!r}, from {source}): {exc}. "
+            f"{_install_hint()}"
+        ) from exc
+    _check_version(handle, path)
+    return handle
 
 
 lib = _load_library()
@@ -644,10 +685,10 @@ lib.cie_reader_name.restype = c_int
 # ---------------------------------------------------------------------------
 # Optional symbols. cie_get_certificate/cie_timestamp/cie_read_dgs appeared in
 # libopencie-pkcs11 >= 1.0.6, cie_classify_sw/cie_last_error in >= 1.0.12 and
-# cie_read_dgs_can/cie_free are part of the 1.3.0 public API. Wrapped in
-# try/except so the bindings remain importable against older library builds
-# that lack these exports; the corresponding Python wrappers raise
-# AttributeError at call time.
+# cie_read_dgs_can/cie_free are part of the 1.3.0 public API. The loader
+# already rejects libraries older than 1.3.0; the try/except guards are kept
+# so a partially-exporting build (e.g. a custom one) still fails per call
+# with AttributeError rather than at import time.
 # ---------------------------------------------------------------------------
 
 try:
