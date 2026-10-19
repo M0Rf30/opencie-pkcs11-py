@@ -1,0 +1,4 @@
+include LICENSE README.md CHANGELOG.md CONTRIBUTING.md
+include src/opencie_pkcs11/py.typed
+recursive-include tests *.py
+global-exclude __pycache__ *.py[cod]

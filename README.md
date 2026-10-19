@@ -13,13 +13,32 @@ pip install opencie-pkcs11
 - **libopencie-pkcs11** must be installed on your system
   - **libopencie-pkcs11 >= 1.3.0** is required (`cie.read_dgs_can()`,
     `cie_free`-based certificate release, CAN error kind, and the
-    `cie.verify()` return-code contract). Older builds still import, but
-    the new calls raise `AttributeError`.
+    `cie.verify()` return-code contract). Importing the package against an
+    older build fails immediately with a `LibraryLoadError` (an
+    `ImportError`) stating the required and found versions.
   - See [opencie-pkcs11 releases](https://github.com/M0Rf30/opencie-pkcs11/releases) for pre-built binaries
   - Or build from [source](https://github.com/M0Rf30/opencie-pkcs11)
 - Python **>=3.10**
 
 The bindings use [`ctypes`](https://docs.python.org/3/library/ctypes.html) — no compiled extension, no third-party dependencies. `libopencie-pkcs11` is located at import time via the standard dynamic linker search path (`LD_LIBRARY_PATH` on Linux, `DYLD_LIBRARY_PATH` on macOS, `PATH` on Windows).
+
+### Troubleshooting: library not found
+
+If `import opencie_pkcs11` raises `LibraryLoadError` ("Cannot load
+libopencie-pkcs11 ..."), the native library is not on the dynamic linker
+search path. Either:
+
+- install a release of `libopencie-pkcs11` (>= 1.3.0) from
+  <https://github.com/M0Rf30/opencie-pkcs11/releases>, then run `ldconfig`
+  on Linux; or
+- point the bindings at it explicitly:
+
+  ```bash
+  export OPENCIE_PKCS11_LIB=/opt/opencie/lib/libopencie-pkcs11.so
+  ```
+
+The library exports no version symbol, so the version check probes for
+symbols introduced in 1.3.0 (`cie_read_dgs_can`, `cie_last_error`).
 
 ## Modules
 

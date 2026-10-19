@@ -6,7 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "opencie-pkcs11"
 version = "0.3.0"
 description = "Python ctypes bindings for libopencie-pkcs11 — PKCS#11 interface for the Italian CIE smart card"
+readme = "README.md"
 license = "MPL-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Gianluca Boiano", email = "morf3089@gmail.com" }]
 requires-python = ">=3.10"
 keywords = ["pkcs11", "cie", "smartcard", "ffi"]
 classifiers = [
@@ -22,9 +25,17 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/M0Rf30/opencie-pkcs11-py"
 Repository = "https://github.com/M0Rf30/opencie-pkcs11-py"
+Issues = "https://github.com/M0Rf30/opencie-pkcs11-py/issues"
+Changelog = "https://github.com/M0Rf30/opencie-pkcs11-py/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5", "build>=1.2", "twine>=5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+opencie_pkcs11 = ["py.typed"]
 
 [tool.ruff]
 line-length = 88
