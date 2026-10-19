@@ -74,7 +74,9 @@ try:
     if not slots:
         raise SystemExit
 
-    session = pkcs11.open_session(slots[0], pkcs11.CKF_SERIAL_SESSION | pkcs11.CKF_RW_SESSION)
+    session = pkcs11.open_session(
+        slots[0], pkcs11.CKF_SERIAL_SESSION | pkcs11.CKF_RW_SESSION
+    )
     try:
         pkcs11.login(session, pkcs11.CKU_USER, "12345678")
         try:

@@ -299,9 +299,20 @@ def test_get_certificate_error_does_not_free(fake):
 
 def test_is_enabled_only_for_one(fake):
     fake(cie_is_enabled=lambda pan: 1)
-    assert cie.is_enabled("PAN") is True
+    assert cie.is_enabled("AB12") is True
     fake(cie_is_enabled=lambda pan: 0)
-    assert cie.is_enabled("PAN") is False
+    assert cie.is_enabled("AB12") is False
+
+
+def test_malformed_pan_never_reaches_library(fake):
+    def boom(pan):
+        raise AssertionError("library called with malformed PAN")
+
+    fake(cie_is_enabled=boom, cie_disable=boom)
+    assert cie.is_enabled("NO-SUCH-PAN") is False
+    with pytest.raises(PKCS11Error) as exc:
+        cie.disable("NO-SUCH-PAN")
+    assert exc.value.rv == _ffi.CKR_ARGUMENTS_BAD
 
 
 # ---------------------------------------------------------------------------

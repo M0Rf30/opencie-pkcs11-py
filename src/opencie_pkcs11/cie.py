@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import ctypes
+import re
 from collections.abc import Callable
 from ctypes import (
     POINTER,
@@ -31,6 +32,7 @@ from opencie_pkcs11._ffi import (
     CIE_ERR_WRONG_CAN,
     CIE_ERR_WRONG_PARAMS,
     CIE_ERR_WRONG_PIN,
+    CKR_ARGUMENTS_BAD,
     CKR_BUFFER_TOO_SMALL,
     CKR_OK,
     CKR_PIN_INCORRECT,
@@ -92,6 +94,14 @@ class WrongCanError(CieError):
 
     The library never retries a wrong CAN automatically; neither should callers.
     """
+
+
+_PAN_RE = re.compile(r"[0-9A-Fa-f]{1,32}")
+
+
+def _valid_pan(pan: str) -> bool:
+    """libopencie-pkcs11 1.3.3 aborts the process on a malformed PAN."""
+    return _PAN_RE.fullmatch(pan) is not None
 
 
 def _check_rv(rv: int) -> None:
@@ -231,14 +241,20 @@ def is_enabled(pan: str) -> bool:
     (~/.CIEPKI) exists for that PAN; a card that is merely inserted is not
     reported as enrolled.
     """
+    if not _valid_pan(pan):
+        return False
     return lib.cie_is_enabled(pan.encode()) == 1
 
 
 def disable(pan: str) -> None:
     """Remove the enrolment for the card identified by PAN.
 
-    Raises PKCS11Error(CKR_FUNCTION_FAILED) if the card was not enrolled.
+    Raises PKCS11Error(CKR_FUNCTION_FAILED) if the card was not enrolled, and
+    PKCS11Error(CKR_ARGUMENTS_BAD) if PAN is not 1-32 hexadecimal digits
+    (without calling the library, which aborts the process on such input).
     """
+    if not _valid_pan(pan):
+        raise PKCS11Error(CKR_ARGUMENTS_BAD)
     _check_rv(lib.cie_disable(pan.encode()))
 
 

@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-10-20
+
+### Fixed
+- `is_enabled()` / `disable()` validate the PAN (1-32 hex digits) before
+  calling the library, which aborts the process on malformed input.
 
 ### Added
 - Clear `LibraryLoadError` (an `ImportError`) when `libopencie-pkcs11` cannot
