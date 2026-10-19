@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout bindings
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout libopencie-pkcs11
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: M0Rf30/opencie-pkcs11
           path: opencie-pkcs11
@@ -46,7 +46,7 @@ jobs:
           sudo ldconfig
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
